@@ -1,0 +1,73 @@
+{
+  "name": "march",
+  "displayName": "March",
+  "description": "Sketch backend and frontend architecture on a canvas -- drag typed shapes or hand-draw them -- and generate real, runnable code from it via your own coding agent CLI (Claude Code by default, any CLI-based agent supported).",
+  "version": "0.1.0",
+  "private": true,
+  "publisher": "ArtemKrasnyi",
+  "engines": {
+    "vscode": "^1.93.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "icon": "resources/icon.png",
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "march.open",
+        "title": "March: Open",
+        "category": "March"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "march",
+          "title": "March",
+          "icon": "resources/activity-bar-icon.png"
+        }
+      ]
+    },
+    "views": {
+      "march": [
+        {
+          "id": "march.launcher",
+          "name": "",
+          "type": "webview"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "March",
+      "properties": {
+        "march.agentBin": {
+          "type": "string",
+          "default": "claude",
+          "description": "Path to your coding agent's CLI binary. Defaults to the Claude Code CLI, but any CLI-based agent that opens an interactive chat with no arguments works. If March can't run it, it'll ask you to locate it and save the result here."
+        },
+        "march.agentArgs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["-p", "--dangerously-skip-permissions", "--output-format", "text", "--verbose"],
+          "description": "Flags used only for Autodiscover's one-shot, non-interactive run (it needs a real exit code, unlike Generate's interactive session). Defaults match the Claude Code CLI -- change these if march.agentBin points at a different agent with different non-interactive flags."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "watch": "node esbuild.config.mjs --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "package": "npx @vscode/vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@march/spec-schema": "*",
+    "@types/node": "^20.14.15",
+    "@types/vscode": "^1.93.0",
+    "esbuild": "^0.23.1",
+    "typescript": "^5.5.4"
+  }
+}
