@@ -82,11 +82,11 @@ the dev host window (Cmd/Ctrl+R inside it). Changes to `apps/web/src/**`
 npm run package   # builds everything, then runs vsce package in apps/extension
 ```
 
-This produces `apps/extension/march-<version>.vsix`. Install it into any VS
-Code (yours or someone else's) without going through the Marketplace:
+This produces `apps/extension/march-ext-<version>.vsix`. Install it into any
+VS Code (yours or someone else's) without going through the Marketplace:
 
 ```bash
-code --install-extension apps/extension/march-0.1.0.vsix
+code --install-extension apps/extension/march-ext-0.1.1.vsix
 ```
 
 or via the UI: Extensions panel -> `...` menu -> "Install from VSIX...".

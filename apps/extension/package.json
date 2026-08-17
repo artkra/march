@@ -1,6 +1,6 @@
 {
-  "name": "march",
-  "displayName": "March",
+  "name": "march-ext",
+  "displayName": "March - Visual Architecture",
   "description": "Sketch backend and frontend architecture on a canvas -- drag typed shapes or hand-draw them -- and generate real, runnable code from it via your own coding agent CLI, whichever one you point it at.",
   "version": "0.1.1",
   "private": true,
