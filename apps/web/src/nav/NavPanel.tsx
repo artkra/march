@@ -1,67 +1,42 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type ModuleSummary } from "../api/client";
 import { NewModuleModal } from "./NewModuleModal";
-import { Select } from "../components/Select";
 
-const AGENT_PRESETS = [
-  { bin: "claude", label: "🤖 Claude Code" },
-  { bin: "aider", label: "🔧 Aider" },
-  { bin: "codex", label: "🌀 Codex CLI" },
-];
-
-function AgentPicker() {
+/**
+ * Free-text only, deliberately -- no bundled presets for specific agent
+ * CLIs. `agentBin` lives in `.march/project.json` (see MarchStore), not a
+ * VS Code setting, so it travels with the project like everything else.
+ */
+function AgentPicker({ agentBin }: { agentBin: string }) {
   const queryClient = useQueryClient();
-  const settings = useQuery({ queryKey: ["agent-settings"], queryFn: api.getAgentSettings });
-  const [editingCustom, setEditingCustom] = useState(false);
-  const [customBin, setCustomBin] = useState("");
+  const [value, setValue] = useState(agentBin);
 
-  const updateBin = useMutation({
-    mutationFn: (bin: string) => api.updateAgentBin(bin),
-    onSuccess: (data) => {
-      queryClient.setQueryData(["agent-settings"], data);
-      setEditingCustom(false);
-    },
+  useEffect(() => setValue(agentBin), [agentBin]);
+
+  const update = useMutation({
+    mutationFn: (bin: string) => api.updateProject({ agentBin: bin }),
+    onSuccess: (data) => queryClient.setQueryData(["project"], data),
   });
-
-  if (!settings.data) return null;
-  const currentBin = settings.data.bin;
-  const isPreset = AGENT_PRESETS.some((p) => p.bin === currentBin);
 
   return (
     <div className="nav-agent">
-      <label>Agent</label>
-      <Select
-        compact
-        value={editingCustom ? "custom" : currentBin}
-        onChange={(v) => {
-          if (v === "custom") {
-            setCustomBin(currentBin);
-            setEditingCustom(true);
-            return;
-          }
-          updateBin.mutate(v);
-        }}
-        options={[
-          ...AGENT_PRESETS.map((p) => ({ value: p.bin, label: p.label })),
-          ...(!isPreset && !editingCustom ? [{ value: currentBin, label: `${currentBin} (custom)` }] : []),
-          { value: "custom", label: "Custom binary..." },
-        ]}
-      />
-      {editingCustom && (
-        <div className="nav-agent-custom">
-          <input
-            value={customBin}
-            onChange={(e) => setCustomBin(e.target.value)}
-            placeholder="e.g. aider or /path/to/bin"
-            autoFocus
-          />
-          <button type="button" onClick={() => updateBin.mutate(customBin)} disabled={!customBin.trim()}>
-            Save
-          </button>
-        </div>
-      )}
+      <label>Agent CLI binary</label>
+      <div className="nav-agent-custom">
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="e.g. the CLI command, or a full path to the binary"
+        />
+        <button
+          type="button"
+          onClick={() => update.mutate(value)}
+          disabled={!value.trim() || value === agentBin || update.isPending}
+        >
+          Save
+        </button>
+      </div>
     </div>
   );
 }
@@ -198,7 +173,7 @@ export function NavPanel({
             {discovering ? "Discovering..." : "Autodiscover"}
           </button>
         </div>
-        <AgentPicker />
+        {project.data && <AgentPicker agentBin={project.data.agentBin} />}
       </div>
 
       <div className="nav-tree">

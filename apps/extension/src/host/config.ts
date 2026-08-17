@@ -1,21 +1,18 @@
 import * as vscode from "vscode";
 import { spawn } from "node:child_process";
+import type { MarchStore } from "./store.js";
 
-/** Path to the coding agent's CLI binary -- "claude" by default, but any CLI-based agent works. */
-export function getAgentBin(): string {
-  return vscode.workspace.getConfiguration("march").get<string>("agentBin", "claude");
-}
-
-/** Flags for the one-shot, non-interactive run Autodiscover needs (see terminalRunner.ts's runTracked). */
+/**
+ * Flags for the one-shot, non-interactive run Autodiscover needs (see
+ * terminalRunner.ts's runTracked). Empty by default -- what's needed here
+ * (a non-interactive/print flag, a permission mode, an output format) is
+ * entirely specific to whichever CLI `agentBin` points at, so there's no
+ * agent-agnostic default that would actually work across different agents.
+ * Autodiscover simply won't complete until this is set for whatever agent
+ * is configured (see the clear error messageRouter.ts raises if it's empty).
+ */
 export function getAgentArgs(): string[] {
-  return vscode.workspace
-    .getConfiguration("march")
-    .get<string[]>("agentArgs", ["-p", "--dangerously-skip-permissions", "--output-format", "text", "--verbose"]);
-}
-
-/** Sets `march.agentBin` directly, for the in-webview agent picker (see NavPanel.tsx). */
-export async function setAgentBin(bin: string): Promise<void> {
-  await vscode.workspace.getConfiguration("march").update("agentBin", bin, vscode.ConfigurationTarget.Global);
+  return vscode.workspace.getConfiguration("march").get<string[]>("agentArgs", []);
 }
 
 function binWorks(bin: string): Promise<boolean> {
@@ -35,12 +32,12 @@ function binWorks(bin: string): Promise<boolean> {
  * directly. VS Code (and the extension host process it launches) is usually
  * started from a GUI launcher/dock, not a terminal, so on macOS/Linux it
  * doesn't inherit PATH entries added by .zshrc/.bashrc/nvm/asdf/etc -- a
- * direct `spawn("claude", ...)` can report "not found" even though `claude
- * --version` works fine when you type it yourself. `-ilc` (interactive
- * login) sources the same profile files a real terminal would, matching
- * what actually happens when a generated VS Code *terminal* runs the same
- * binary (which is why only this pre-flight check needed the fix, not
- * terminalRunner.ts's terminals).
+ * direct `spawn(bin, ...)` can report "not found" even though running it
+ * works fine when you type it yourself. `-ilc` (interactive login) sources
+ * the same profile files a real terminal would, matching what actually
+ * happens when a generated VS Code *terminal* runs the same binary (which
+ * is why only this pre-flight check needed the fix, not terminalRunner.ts's
+ * terminals).
  */
 function spawnThroughLoginShell(bin: string, args: string[]) {
   if (process.platform === "win32") {
@@ -52,21 +49,21 @@ function spawnThroughLoginShell(bin: string, args: string[]) {
 }
 
 /**
- * Returns a working path to the agent CLI, prompting the user to locate it
- * if the configured/default binary can't be found or run -- rather than
- * silently spawning a terminal that just prints "command not found" with no
- * further explanation. Returns undefined if the user cancels.
+ * Returns a working path to the project's agent CLI (stored in
+ * `.march/project.json`, not a VS Code setting -- see store.ts), prompting
+ * the user to locate it if it can't be found or run -- rather than silently
+ * spawning a terminal that just prints "command not found" with no further
+ * explanation. Returns undefined if the user cancels.
  */
-export async function resolveAgentBin(): Promise<string | undefined> {
-  const configured = getAgentBin();
-  if (await binWorks(configured)) return configured;
+export async function resolveAgentBin(store: MarchStore): Promise<string | undefined> {
+  const project = await store.getOrCreateProject();
+  const configured = project.agentBin;
+  if (configured && (await binWorks(configured))) return configured;
 
-  const choice = await vscode.window.showErrorMessage(
-    `March: couldn't run "${configured}" -- is your coding agent CLI installed and on your PATH? ` +
-      `(Configured via the "march.agentBin" setting; defaults to the Claude Code CLI.)`,
-    "Locate binary...",
-    "Cancel",
-  );
+  const message = configured
+    ? `March: couldn't run "${configured}" -- is your coding agent CLI installed and on your PATH?`
+    : "March: no coding agent CLI is set for this project yet.";
+  const choice = await vscode.window.showErrorMessage(message, "Locate binary...", "Cancel");
   if (choice !== "Locate binary...") return undefined;
 
   const picked = await vscode.window.showOpenDialog({
@@ -83,6 +80,6 @@ export async function resolveAgentBin(): Promise<string | undefined> {
     return undefined;
   }
 
-  await vscode.workspace.getConfiguration("march").update("agentBin", binPath, vscode.ConfigurationTarget.Global);
+  await store.updateProject({ agentBin: binPath });
   return binPath;
 }

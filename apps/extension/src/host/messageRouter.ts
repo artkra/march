@@ -15,7 +15,7 @@ import {
   type ModuleKind,
 } from "@march/spec-schema";
 import { MarchStore } from "./store.js";
-import { getAgentArgs, getAgentBin, resolveAgentBin, setAgentBin } from "./config.js";
+import { getAgentArgs, resolveAgentBin } from "./config.js";
 import { runInteractive, runTracked } from "./terminalRunner.js";
 import {
   buildAutodiscoverProjectPrompt,
@@ -54,8 +54,15 @@ export async function handleRequest(store: MarchStore, workspaceRoot: string, re
     case "getProject":
       return store.getOrCreateProject();
 
-    case "updateProject":
-      return store.updateProject({ description: request.description });
+    case "updateProject": {
+      const patch: { description?: string; agentBin?: string } = { description: request.description };
+      if (request.agentBin !== undefined) {
+        const agentBin = request.agentBin.trim();
+        if (!agentBin) throw new Error("agentBin cannot be empty");
+        patch.agentBin = agentBin;
+      }
+      return store.updateProject(patch);
+    }
 
     case "listModules":
       return store.listModules();
@@ -113,7 +120,7 @@ export async function handleRequest(store: MarchStore, workspaceRoot: string, re
     case "generate": {
       const module = await store.getModule(request.slug);
       if (!module) throw new Error(`Module "${request.slug}" not found`);
-      const agentBin = await resolveAgentBin();
+      const agentBin = await resolveAgentBin(store);
       if (!agentBin) return {};
 
       const spec = parseModuleSpec(module.diagram.specJson);
@@ -138,8 +145,17 @@ export async function handleRequest(store: MarchStore, workspaceRoot: string, re
     }
 
     case "autodiscoverProject": {
-      const agentBin = await resolveAgentBin();
+      const agentBin = await resolveAgentBin(store);
       if (!agentBin) return {};
+
+      const args = getAgentArgs();
+      if (args.length === 0) {
+        throw new Error(
+          'Autodiscover needs non-interactive flags for your agent CLI, set via the "march.agentArgs" VS Code ' +
+            "setting -- these vary per agent (e.g. a print/non-interactive flag, an output format), so there's " +
+            "no default that works across all of them. Check your agent's own CLI docs for its non-interactive mode.",
+        );
+      }
 
       const runId = newRunId();
       await fs.mkdir(store.jobsDir, { recursive: true });
@@ -149,7 +165,7 @@ export async function handleRequest(store: MarchStore, workspaceRoot: string, re
 
       const result = await runTracked({
         agentBin,
-        args: getAgentArgs(),
+        args,
         cwd: workspaceRoot,
         title: "March: Autodiscover",
         stdinFile: promptFile,
@@ -178,16 +194,6 @@ export async function handleRequest(store: MarchStore, workspaceRoot: string, re
       await store.createProjectFromDiscovery(parsed.data);
       await fs.unlink(outputPath).catch(() => {});
       return {};
-    }
-
-    case "getAgentSettings":
-      return { bin: getAgentBin(), args: getAgentArgs() };
-
-    case "updateAgentBin": {
-      const bin = request.bin.trim();
-      if (!bin) throw new Error("bin is required");
-      await setAgentBin(bin);
-      return { bin: getAgentBin(), args: getAgentArgs() };
     }
   }
 }

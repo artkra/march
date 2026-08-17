@@ -1,9 +1,9 @@
 import * as vscode from "vscode";
 
 /**
- * Opens a real, visible terminal running `agentBin` interactively (for
- * Claude Code: no -p, no --dangerously-skip-permissions) and hands it a
- * one-line instruction to go read `promptFile` -- rather than trying to
+ * Opens a real, visible terminal running `agentBin` interactively -- no
+ * flags that bypass its own permission system -- and hands it a one-line
+ * instruction to go read `promptFile` -- rather than trying to
  * paste the (multi-paragraph, multi-KB) prompt text itself into the pty,
  * whose embedded newlines would otherwise be interpreted as Enter
  * keypresses and submit it line by line. Because this is a real interactive
@@ -12,8 +12,8 @@ import * as vscode from "vscode";
  * themselves. There is no way to know when an open-ended REPL session is
  * "done" -- this is a hand-off, not a job the extension tracks to
  * completion. Works with any CLI agent that opens into an interactive chat
- * when run with no arguments and can read a file when told to, not just
- * Claude Code (see `march.agentBin`).
+ * when run with no arguments and can read a file when told to (the exact
+ * binary is per-project, see MarchStore's `agentBin`).
  */
 export function runInteractive(options: { agentBin: string; cwd: string; title: string; promptFile: string }): void {
   const terminal = vscode.window.createTerminal({ name: options.title, cwd: options.cwd });
@@ -54,7 +54,7 @@ export interface TrackedRunResult {
  * is responsible for surfacing that clearly rather than assuming success.
  * `args` is the caller's responsibility (see `march.agentArgs`) since
  * different agent CLIs take different non-interactive flags -- this
- * function has no Claude-specific knowledge at all.
+ * function has no knowledge of any specific agent at all.
  */
 export async function runTracked(options: {
   agentBin: string;

@@ -13,6 +13,8 @@ export interface ProjectData {
   version: "1.0";
   name: string;
   description: string;
+  /** Path to this project's coding agent CLI binary -- lives here, not a VS Code setting, so it travels with the project like everything else in .march/. */
+  agentBin: string;
 }
 
 export interface ModuleSummary {
@@ -40,14 +42,9 @@ export interface RootDiagramData {
   graphJson: ProjectGraph;
 }
 
-export interface AgentSettings {
-  bin: string;
-  args: string[];
-}
-
 export type MarchRequest =
   | { type: "getProject" }
-  | { type: "updateProject"; description?: string }
+  | { type: "updateProject"; description?: string; agentBin?: string }
   | { type: "listModules" }
   | { type: "createModule"; name: string; description?: string; kind: ModuleKind; language: LanguageId }
   | { type: "getModule"; slug: string }
@@ -57,9 +54,7 @@ export type MarchRequest =
   | { type: "getRootDiagram" }
   | { type: "saveRootDiagram"; tldrawSnapshot: unknown; graphJson: ProjectGraph }
   | { type: "generate"; slug: string }
-  | { type: "autodiscoverProject" }
-  | { type: "getAgentSettings" }
-  | { type: "updateAgentBin"; bin: string };
+  | { type: "autodiscoverProject" };
 
 export type MarchRequestType = MarchRequest["type"];
 

@@ -1,5 +1,4 @@
 import type {
-  AgentSettings,
   DiagramData,
   HostMessage,
   LanguageId,
@@ -13,8 +12,6 @@ import type {
   RootDiagramData,
   RpcRequestMessage,
 } from "@march/spec-schema";
-
-export type { AgentSettings } from "@march/spec-schema";
 
 export type {
   DiagramData as DiagramRecord,
@@ -50,7 +47,9 @@ function call<T>(request: MarchRequest): Promise<T> {
 
 export const api = {
   getProject: () => call<ProjectData>({ type: "getProject" }),
-  updateProject: (data: { description?: string }) => call<ProjectData>({ type: "updateProject", ...data }),
+  /** `agentBin` lives in .march/project.json, not a VS Code setting -- see MarchStore. */
+  updateProject: (data: { description?: string; agentBin?: string }) =>
+    call<ProjectData>({ type: "updateProject", ...data }),
 
   listModules: () => call<ModuleSummary[]>({ type: "listModules" }),
   createModule: (data: { name: string; description?: string; kind: ModuleKind; language: LanguageId }) =>
@@ -71,7 +70,4 @@ export const api = {
   generate: (slug: string) => call<void>({ type: "generate", slug }),
   /** Awaits the whole run -- may take minutes, same as any other RPC call here, just a slow one. */
   autodiscoverProject: () => call<void>({ type: "autodiscoverProject" }),
-
-  getAgentSettings: () => call<AgentSettings>({ type: "getAgentSettings" }),
-  updateAgentBin: (bin: string) => call<AgentSettings>({ type: "updateAgentBin", bin }),
 };

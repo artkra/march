@@ -9,6 +9,8 @@ export interface ProjectFile {
   version: "1.0";
   name: string;
   description: string;
+  /** Path to this project's coding agent CLI binary -- see MarchStore.getOrCreateProject's defaulting for backward compat. */
+  agentBin: string;
 }
 
 export interface ModuleFile {
@@ -83,16 +85,28 @@ export class MarchStore {
     await this.getOrCreateProject();
   }
 
+  /**
+   * Defaults `agentBin` to "" for project.json files written before that
+   * field existed -- no built-in assumption of which CLI agent a project
+   * uses; resolveAgentBin's "Locate binary..." prompt (see config.ts)
+   * handles an empty/not-found value the same way either way, so this
+   * degrades gracefully rather than needing a real default.
+   */
   async getOrCreateProject(): Promise<ProjectFile> {
     const file = path.join(this.marchDir, "project.json");
-    const existing = await this.readJson<ProjectFile>(file);
-    if (existing) return existing;
-    const project: ProjectFile = { version: "1.0", name: path.basename(this.workspaceRoot), description: "" };
+    const existing = await this.readJson<Omit<ProjectFile, "agentBin"> & { agentBin?: string }>(file);
+    if (existing) return { ...existing, agentBin: existing.agentBin ?? "" };
+    const project: ProjectFile = {
+      version: "1.0",
+      name: path.basename(this.workspaceRoot),
+      description: "",
+      agentBin: "",
+    };
     await this.writeJson(file, project);
     return project;
   }
 
-  async updateProject(patch: Partial<Pick<ProjectFile, "description" | "name">>): Promise<ProjectFile> {
+  async updateProject(patch: Partial<Pick<ProjectFile, "description" | "name" | "agentBin">>): Promise<ProjectFile> {
     const current = await this.getOrCreateProject();
     const next = { ...current, ...patch };
     await this.writeJson(path.join(this.marchDir, "project.json"), next);

@@ -3,28 +3,45 @@
 A VS Code extension: sketch an architecture on a canvas -- drag typed shapes,
 hand-drawable too (backend: entity/endpoint/interface/database/queue/
 implementation/input/output/external; frontend: component/page/store/
-api_client) -- and generate real, runnable code from it via your own coding
-agent CLI (Claude Code by default, but any CLI-based agent works -- see
-`march.agentBin`) in an interactive terminal session you watch and approve,
-independently per module, in whatever language/framework that module
-targets. Or have it reverse-engineer a starting set of diagrams from your
-whole existing workspace.
+api_client) -- and generate real, runnable code from it via whatever CLI
+coding agent you point it at (set per-project, in the nav panel) in an
+interactive terminal session you watch and approve, independently per
+module, in whatever language/framework that module targets. Or have it
+reverse-engineer a starting set of diagrams from your whole existing
+workspace.
 
 Runs as an extension, not a server: the webview is a real browser context
 (tldraw and all the canvas logic run unmodified), and the extension host is
 just your own OS process -- so your agent CLI runs with your actual shell and
 your actual login, no container to authenticate into.
 
+## Features
+
+- A real canvas (tldraw) for sketching architecture -- drag typed node
+  shapes onto it, or hand-draw them and have the shape recognized and
+  swapped for a typed node automatically
+- Separate node vocabularies for backend (entity/endpoint/database/queue/...)
+  and frontend (component/page/store/api_client) modules, each with their
+  own language/framework list
+- Generate real, runnable code per module in a real, interactive terminal
+  you watch and approve -- not a hidden background process
+- Autodiscover: reverse-engineer a starting set of diagrams from an
+  existing, undocumented codebase in your workspace
+- Works with whatever CLI-based coding agent you already use, set per
+  project
+- Everything lives in plain JSON files under `.march/` in your own
+  workspace -- no database, no server, git-diffable and reviewable like any
+  other change
+
 ## Prerequisites
 
 - VS Code 1.93+ (needed for the Terminal Shell Integration API Autodiscover
   relies on -- see "How code generation runs" below)
 - Node.js 20+ and npm, to build it
-- A CLI-based coding agent installed and logged in -- the
-  [Claude Code CLI](https://docs.claude.com/en/docs/claude-code) by default
-  (`claude --version` should work in your regular terminal), or any other
-  agent CLI pointed at via `march.agentBin`. March just shells out to it
-  with your inherited environment.
+- A CLI-based coding agent installed and logged in -- whatever CLI command
+  starts it should work in your regular terminal. March just shells out to
+  it with your inherited environment; which one is set per-project in the
+  nav panel (see "Choosing an agent" below).
 
 ## Checking it out locally (development)
 
@@ -123,7 +140,7 @@ git-diffable and reviewable in PRs like anything else:
 
 ```
 .march/
-  project.json            { name, description }
+  project.json            { name, description, agentBin }
   root-diagram.json       the Root canvas: tldraw snapshot + module graph
   modules/<slug>/
     module.json              name, description, kind, language, codePath
@@ -201,36 +218,38 @@ whatever your actual VS Code color theme is, live, including the canvas
 
 ### Choosing an agent
 
-An **Agent** picker sits under the project name in the nav panel (below
-Generate code / Autodiscover) -- Claude Code, Aider, and Codex CLI are
-listed by default, or pick "Custom binary..." to type any exact bin name or
-path. This writes straight to the `march.agentBin` setting below, so it's
-just a more discoverable front end for it; either way works.
+An **Agent CLI binary** field sits under the project name in the nav panel
+(below Generate code / Autodiscover) -- free text, no bundled presets for
+specific agents. Type whatever CLI command starts your agent (or a full
+path to it) and hit Save. This is stored in `.march/project.json`
+(`agentBin`), not a VS Code setting, so it travels with the project like
+everything else under `.march/` -- different projects can point at
+different agents.
+
+If it's ever empty or March can't run it, a prompt appears offering to
+locate the binary via a file picker instead, and saves whatever you pick
+back to the same place. Behind the scenes this check goes through your
+login shell (`$SHELL -ilc`), not a direct spawn -- VS Code is normally
+launched from a GUI/dock rather than a terminal, so it doesn't otherwise
+inherit PATH entries added by `.zshrc`/`.bashrc`/nvm/asdf/etc, and a direct
+spawn could report a real, working CLI as "missing".
 
 ### Settings
 
-- `march.agentBin` (default `"claude"`) -- path to your coding agent's CLI
-  binary. Any CLI-based agent that opens into an interactive chat when run
-  with no arguments works, not just Claude Code. If March can't run it,
-  it'll ask you to locate it via a file picker and save the result here
-  itself. Behind the scenes this check goes through your login shell
-  (`$SHELL -ilc`), not a direct spawn -- VS Code is normally launched from a
-  GUI/dock rather than a terminal, so it doesn't otherwise inherit PATH
-  entries added by `.zshrc`/`.bashrc`/nvm/asdf/etc, and a direct spawn could
-  report a real, working CLI as "missing".
-- `march.agentArgs` (default `["-p", "--dangerously-skip-permissions",
-  "--output-format", "text", "--verbose"]`) -- flags for Autodiscover's
-  one-shot non-interactive run only (see below); change these if
-  `march.agentBin` points at a different agent with different flags for
-  that kind of run.
+- `march.agentArgs` (default `[]`, a VS Code setting, not per-project) --
+  flags for Autodiscover's one-shot non-interactive run only (see below).
+  Empty by default: there's no set of flags that works across different
+  agent CLIs (a non-interactive/print flag, a permission mode, an output
+  format are all agent-specific), so Autodiscover raises a clear error
+  telling you to set this if it's empty, rather than guessing.
 
 ### How code generation runs
 
 **Generate code** opens a real, visible VS Code terminal per module and runs
-your agent there fully interactively -- for Claude Code, that means no `-p`,
-no `--dangerously-skip-permissions`. Its own permission prompts (if it has
-them) work normally, and you watch/approve/intervene exactly as if you'd
-typed it yourself; the module's spec is written to a prompt file under
+your agent there fully interactively, with no flags that bypass its own
+permission system. Its own permission prompts (if it has them) work
+normally, and you watch/approve/intervene exactly as if you'd typed it
+yourself; the module's spec is written to a prompt file under
 `.march/jobs/` and March just tells the agent (in one line) to go read it,
 rather than trying to paste the whole multi-paragraph prompt into the
 terminal. Because this is an open-ended interactive session, March has no
@@ -240,19 +259,18 @@ report back, it's purely a hand-off.
 **Autodiscover** is different: it's read-only analysis that produces one
 JSON file March needs to parse and act on (creating modules from it), so it
 still needs a deterministic "it's finished, here's the exit code" signal.
-It runs non-interactively (`march.agentArgs`, defaulting to Claude Code's
-`-p --dangerously-skip-permissions`) but inside a *visible* terminal rather
-than a hidden background process, using VS Code's [Terminal Shell
-Integration API](https://code.visualstudio.com/docs/terminal/shell-integration)
+It runs non-interactively (`march.agentArgs`, which you have to set for
+whatever agent you're using -- see Settings above) but inside a *visible*
+terminal rather than a hidden background process, using VS Code's [Terminal
+Shell Integration API](https://code.visualstudio.com/docs/terminal/shell-integration)
 to detect completion -- this needs a POSIX-ish shell (bash/zsh/fish/pwsh);
 it won't activate for cmd.exe, and if it doesn't activate in time March
 tells you rather than silently guessing at success.
 
 Same trust model either way as running the agent yourself in a terminal,
-because that's what's actually happening -- generation just additionally
-gets the agent's own interactive safety net back (for agents that have one),
-since headless mode is what required skipping permissions in the first
-place.
+because that's what's actually happening -- neither path disables the
+agent's own permission system, they just differ in how completion gets
+tracked.
 
 ### What Generate's prompt actually asks for
 
