@@ -74,22 +74,6 @@ code --install-extension apps/extension/march-0.1.0.vsix
 
 or via the UI: Extensions panel -> `...` menu -> "Install from VSIX...".
 
-### Publishing to the VS Code Marketplace
-
-1. Create a [publisher](https://marketplace.visualstudio.com/manage) (needs
-   an Azure DevOps organization) and a Personal Access Token scoped to
-   "Marketplace: Manage".
-2. Set `"publisher"` in `apps/extension/package.json` to your real publisher
-   id (it's currently the placeholder `march-dev`), and add a `"repository"`
-   field pointing at this repo -- `vsce` warns without them.
-3. `npx @vscode/vsce login <publisher>` (one-time, stores the PAT).
-4. From `apps/extension/`: `npx @vscode/vsce publish` (bumps nothing by
-   default; pass `patch`/`minor`/`major` to also bump `version` in
-   `package.json`, e.g. `npx @vscode/vsce publish patch`).
-
-Not required for local use -- everything above works fully offline via the
-`.vsix` route.
-
 ## How it works
 
 1. Open a folder in VS Code, run **March: Open** from the command palette.
