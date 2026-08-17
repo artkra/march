@@ -169,14 +169,12 @@ export class MarchStore {
    * directory that was actually explored, so a later "Generate" for this
    * module targets the same code it was discovered from, not a fresh folder.
    */
-  async createModuleFromSpec(spec: ModuleSpec, language: string, codePath: string): Promise<ModuleSummary> {
+  async createModuleFromSpec(spec: ModuleSpec, kind: ModuleKind, language: string, codePath: string): Promise<ModuleSummary> {
     const slug = await uniqueSlug(spec.module.name, (candidate) => this.dirExists(this.moduleDir(candidate)));
     const meta: ModuleFile = {
       name: spec.module.name,
       description: spec.module.description || "",
-      // Autodiscovery only knows how to infer backend architecture today --
-      // see the comment on ProjectDiscovery in schema.ts.
-      kind: "backend",
+      kind,
       language,
       createdAt: new Date().toISOString(),
       codePath,
@@ -200,7 +198,7 @@ export class MarchStore {
     const nameToSlug = new Map<string, string>();
     const created: ModuleSummary[] = [];
     for (const mod of discovery.modules) {
-      const summary = await this.createModuleFromSpec(mod.spec, mod.language, mod.codePath);
+      const summary = await this.createModuleFromSpec(mod.spec, mod.kind, mod.language, mod.codePath);
       nameToSlug.set(mod.spec.module.name, summary.slug);
       created.push(summary);
     }

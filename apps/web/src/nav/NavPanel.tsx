@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { NavLink, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ModuleKind } from "@march/spec-schema";
 import { api, type ModuleSummary } from "../api/client";
 import { NewModuleModal } from "./NewModuleModal";
+
+const KIND_LABELS: Record<ModuleKind, string> = { backend: "Backend", frontend: "Frontend" };
 
 /**
  * Free-text only, deliberately -- no bundled presets for specific agent
@@ -84,6 +87,34 @@ function ModuleRow({ module, active, onDeleted }: { module: ModuleSummary; activ
   );
 }
 
+/** A subfolder-style grouping of modules by kind -- hidden entirely if empty, so a project with only backend modules doesn't show a dangling empty "Frontend" group. */
+function ModuleKindGroup({
+  kind,
+  modules,
+  activeSlug,
+  onDeleted,
+}: {
+  kind: ModuleKind;
+  modules: ModuleSummary[];
+  activeSlug: string | undefined;
+  onDeleted: (slug: string) => void;
+}) {
+  if (modules.length === 0) return null;
+  return (
+    <div className="nav-kind-group">
+      <div className="nav-kind-header">
+        <span className="caret">▾</span>
+        <span>{KIND_LABELS[kind]}</span>
+      </div>
+      <div className="nav-kind-children">
+        {modules.map((m) => (
+          <ModuleRow key={m.slug} module={m} active={m.slug === activeSlug} onDeleted={() => onDeleted(m.slug)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function NavPanel({
   collapsed,
   onToggleCollapse,
@@ -115,6 +146,12 @@ export function NavPanel({
     } finally {
       setLaunching(false);
     }
+  };
+
+  const handleModuleDeleted = (slug: string) => {
+    void queryClient.invalidateQueries({ queryKey: ["modules"] });
+    void queryClient.invalidateQueries({ queryKey: ["root-diagram"] });
+    if (slug === activeSlug) navigate("/");
   };
 
   const handleAutodiscover = async () => {
@@ -187,18 +224,18 @@ export function NavPanel({
             <span>Root</span>
           </NavLink>
           <div className="nav-group-children">
-            {modules.data?.map((m) => (
-              <ModuleRow
-                key={m.slug}
-                module={m}
-                active={m.slug === activeSlug}
-                onDeleted={() => {
-                  void queryClient.invalidateQueries({ queryKey: ["modules"] });
-                  void queryClient.invalidateQueries({ queryKey: ["root-diagram"] });
-                  if (m.slug === activeSlug) navigate("/");
-                }}
-              />
-            ))}
+            <ModuleKindGroup
+              kind="backend"
+              modules={modules.data?.filter((m) => m.kind === "backend") ?? []}
+              activeSlug={activeSlug}
+              onDeleted={handleModuleDeleted}
+            />
+            <ModuleKindGroup
+              kind="frontend"
+              modules={modules.data?.filter((m) => m.kind === "frontend") ?? []}
+              activeSlug={activeSlug}
+              onDeleted={handleModuleDeleted}
+            />
             <button className="nav-add" onClick={() => setModalOpen(true)}>
               + new module
             </button>

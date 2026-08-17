@@ -352,20 +352,19 @@ export function safeParseModuleSpec(data: unknown) {
 }
 
 const BACKEND_LANGUAGE_IDS = BACKEND_LANGUAGES.map((l) => l.id) as [BackendLanguageId, ...BackendLanguageId[]];
+const FRONTEND_LANGUAGE_IDS = FRONTEND_LANGUAGES.map((l) => l.id) as [FrontendLanguageId, ...FrontendLanguageId[]];
 
 // Output of a whole-workspace "autodiscover" job: one ModuleSpec per
 // identified module (mirroring a single discoverModule result) plus
 // freeform-labeled edges between them by module name, since the agent
 // doesn't know module slugs yet -- those are only assigned once each
-// discovered module is actually created on disk. Backend-only for now --
-// the autodiscovery prompt only knows how to infer entities/endpoints/
-// databases, not frontend components/pages, so discovered modules are
-// always created with kind "backend" (see store.createProjectFromDiscovery).
-export const projectDiscoveryModuleSchema = z.object({
-  language: z.enum(BACKEND_LANGUAGE_IDS),
-  codePath: z.string().min(1),
-  spec: moduleSpecSchema,
-});
+// discovered module is actually created on disk. `kind` picks which of the
+// two language lists `language` is validated against, same split as a
+// manually-created module.
+export const projectDiscoveryModuleSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("backend"), language: z.enum(BACKEND_LANGUAGE_IDS), codePath: z.string().min(1), spec: moduleSpecSchema }),
+  z.object({ kind: z.literal("frontend"), language: z.enum(FRONTEND_LANGUAGE_IDS), codePath: z.string().min(1), spec: moduleSpecSchema }),
+]);
 export type ProjectDiscoveryModule = z.infer<typeof projectDiscoveryModuleSchema>;
 
 export const projectDiscoveryEdgeSchema = z.object({

@@ -15,8 +15,8 @@ import {
   type ModuleKind,
 } from "@march/spec-schema";
 import { MarchStore } from "./store.js";
-import { getAgentArgs, resolveAgentBin } from "./config.js";
-import { runInteractive, runTracked } from "./terminalRunner.js";
+import { resolveAgentBin } from "./config.js";
+import { runInteractive } from "./terminalRunner.js";
 import {
   buildAutodiscoverProjectPrompt,
   buildBackendGeneratePrompt,
@@ -41,6 +41,34 @@ function requireLanguage(kind: ModuleKind, language: unknown): LanguageId {
 
 function newRunId(): string {
   return crypto.randomBytes(8).toString("hex");
+}
+
+/**
+ * Polls for a file to appear rather than tracking a process exit code --
+ * Autodiscover hands off to a fully interactive terminal (see runInteractive)
+ * with no completion signal at all, so this is the only way to know when the
+ * agent is done: it's finished writing the one file it was told to produce.
+ * The 30-minute cap is just a safety net against an abandoned/stuck session
+ * leaving the RPC call (and the webview's "Discovering..." state) hanging
+ * forever, not a real expectation of how long this should take.
+ */
+function waitForFile(filePath: string, timeoutMs = 30 * 60 * 1000, pollIntervalMs = 2000): Promise<void> {
+  const start = Date.now();
+  return new Promise((resolve, reject) => {
+    const check = () => {
+      fs.stat(filePath).then(
+        () => resolve(),
+        () => {
+          if (Date.now() - start > timeoutMs) {
+            reject(new Error(`Timed out after ${Math.round(timeoutMs / 60000)} minutes waiting for ${filePath}`));
+            return;
+          }
+          setTimeout(check, pollIntervalMs);
+        },
+      );
+    };
+    check();
+  });
 }
 
 /**
@@ -148,40 +176,18 @@ export async function handleRequest(store: MarchStore, workspaceRoot: string, re
       const agentBin = await resolveAgentBin(store);
       if (!agentBin) return {};
 
-      const args = getAgentArgs();
-      if (args.length === 0) {
-        throw new Error(
-          'Autodiscover needs non-interactive flags for your agent CLI, set via the "march.agentArgs" VS Code ' +
-            "setting -- these vary per agent (e.g. a print/non-interactive flag, an output format), so there's " +
-            "no default that works across all of them. Check your agent's own CLI docs for its non-interactive mode.",
-        );
-      }
-
       const runId = newRunId();
       await fs.mkdir(store.jobsDir, { recursive: true });
       const promptFile = path.join(store.jobsDir, `${runId}-autodiscover-prompt.txt`);
       const outputPath = path.join(store.jobsDir, `${runId}-autodiscover-output.json`);
       await fs.writeFile(promptFile, buildAutodiscoverProjectPrompt(outputPath));
 
-      const result = await runTracked({
-        agentBin,
-        args,
-        cwd: workspaceRoot,
-        title: "March: Autodiscover",
-        stdinFile: promptFile,
-      });
+      runInteractive({ agentBin, cwd: workspaceRoot, title: "March: Autodiscover", promptFile });
 
-      if (result.timedOut) {
-        throw new Error(
-          "Autodiscovery is running in the terminal, but March couldn't detect a shell integration " +
-            "signal to know when it finishes (this needs bash/zsh/fish/pwsh). Watch the terminal, and once " +
-            "it's done, reopen this and try Autodiscover again -- or ask in a follow-up if you'd like a " +
-            'manual "import last discovery result" action instead.',
-        );
-      }
-      if (result.exitCode !== 0) {
-        throw new Error(`Autodiscovery exited with code ${result.exitCode}. Check the "March: Autodiscover" terminal.`);
-      }
+      await waitForFile(outputPath);
+      // Small settle delay -- the file existing doesn't guarantee the
+      // write that created it has been fully flushed yet.
+      await new Promise((r) => setTimeout(r, 500));
 
       const raw = await fs.readFile(outputPath, "utf8").catch(() => null);
       if (!raw) {

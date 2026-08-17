@@ -14,6 +14,12 @@ import * as vscode from "vscode";
  * completion. Works with any CLI agent that opens into an interactive chat
  * when run with no arguments and can read a file when told to (the exact
  * binary is per-project, see MarchStore's `agentBin`).
+ *
+ * Both Generate and Autodiscover use this same hand-off -- Autodiscover
+ * has to know when the agent is actually done (it needs to read the file
+ * back and act on it), but it gets that by polling for the output file to
+ * appear (see messageRouter.ts's waitForFile) rather than by tracking this
+ * terminal's process in any way.
  */
 export function runInteractive(options: { agentBin: string; cwd: string; title: string; promptFile: string }): void {
   const terminal = vscode.window.createTerminal({ name: options.title, cwd: options.cwd });
@@ -27,82 +33,4 @@ export function runInteractive(options: { agentBin: string; cwd: string; title: 
       true,
     );
   }, 1500);
-}
-
-export interface TrackedRunResult {
-  /** Undefined when shell integration never activated -- see `timedOut`. */
-  exitCode: number | undefined;
-  /** True if the terminal's shell never reported integration in time, so exitCode couldn't be observed. */
-  timedOut: boolean;
-}
-
-/**
- * Runs one non-interactive command in a visible terminal and resolves once
- * it exits, using VS Code's Shell Integration API for a real exit code --
- * the same deterministic completion signal a hidden child_process gave us,
- * just now observable in the Terminal panel instead of only in our own log
- * drawer. The prompt is piped via shell input redirection (POSIX `< file`,
- * matching how bash/zsh/fish read stdin) rather than passed as an argv
- * entry, for the same reason the old headless runner used stdin: avoiding
- * OS arg-length limits on large prompts.
- *
- * Shell integration (and this exact redirection syntax) needs a POSIX-ish
- * shell -- it won't activate for cmd.exe, and even where it does, Windows
- * users on PowerShell need different redirection syntax than this. When it
- * doesn't activate within the timeout, this falls back to firing the
- * command with no completion signal at all (`timedOut: true`); the caller
- * is responsible for surfacing that clearly rather than assuming success.
- * `args` is the caller's responsibility (see `march.agentArgs`) since
- * different agent CLIs take different non-interactive flags -- this
- * function has no knowledge of any specific agent at all.
- */
-export async function runTracked(options: {
-  agentBin: string;
-  args: string[];
-  cwd: string;
-  title: string;
-  stdinFile: string;
-}): Promise<TrackedRunResult> {
-  const terminal = vscode.window.createTerminal({ name: options.title, cwd: options.cwd });
-  terminal.show(false);
-
-  const shellIntegration = await waitForShellIntegration(terminal, 5000);
-  const quotedArgs = options.args.map((a) => `"${a}"`).join(" ");
-  const commandLine = `"${options.agentBin}" ${quotedArgs} < "${options.stdinFile}"`;
-
-  if (!shellIntegration) {
-    terminal.sendText(commandLine, true);
-    return { exitCode: undefined, timedOut: true };
-  }
-
-  const execution = shellIntegration.executeCommand(commandLine);
-  const exitCode = await new Promise<number | undefined>((resolve) => {
-    const sub = vscode.window.onDidEndTerminalShellExecution((e) => {
-      if (e.execution === execution) {
-        sub.dispose();
-        resolve(e.exitCode);
-      }
-    });
-  });
-  return { exitCode, timedOut: false };
-}
-
-function waitForShellIntegration(
-  terminal: vscode.Terminal,
-  timeoutMs: number,
-): Promise<vscode.TerminalShellIntegration | undefined> {
-  if (terminal.shellIntegration) return Promise.resolve(terminal.shellIntegration);
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      sub.dispose();
-      resolve(undefined);
-    }, timeoutMs);
-    const sub = vscode.window.onDidChangeTerminalShellIntegration((e) => {
-      if (e.terminal === terminal) {
-        clearTimeout(timer);
-        sub.dispose();
-        resolve(e.shellIntegration);
-      }
-    });
-  });
 }

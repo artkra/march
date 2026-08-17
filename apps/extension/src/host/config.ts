@@ -2,19 +2,6 @@ import * as vscode from "vscode";
 import { spawn } from "node:child_process";
 import type { MarchStore } from "./store.js";
 
-/**
- * Flags for the one-shot, non-interactive run Autodiscover needs (see
- * terminalRunner.ts's runTracked). Empty by default -- what's needed here
- * (a non-interactive/print flag, a permission mode, an output format) is
- * entirely specific to whichever CLI `agentBin` points at, so there's no
- * agent-agnostic default that would actually work across different agents.
- * Autodiscover simply won't complete until this is set for whatever agent
- * is configured (see the clear error messageRouter.ts raises if it's empty).
- */
-export function getAgentArgs(): string[] {
-  return vscode.workspace.getConfiguration("march").get<string[]>("agentArgs", []);
-}
-
 function binWorks(bin: string): Promise<boolean> {
   return new Promise((resolve) => {
     try {

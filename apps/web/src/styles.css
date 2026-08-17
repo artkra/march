@@ -423,6 +423,33 @@ button:disabled {
   display: inline-block;
 }
 
+.nav-kind-group {
+  margin-bottom: 2px;
+}
+
+.nav-kind-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 14px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  opacity: 0.55;
+}
+
+.nav-kind-header .caret {
+  opacity: 0.6;
+  font-size: 0.65rem;
+  width: 10px;
+  display: inline-block;
+}
+
+.nav-kind-children {
+  padding-left: 14px;
+}
+
 .nav-item-row {
   display: flex;
   align-items: center;

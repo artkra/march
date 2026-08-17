@@ -2,11 +2,11 @@
   "name": "march-ext",
   "displayName": "March - Visual Architecture",
   "description": "Sketch backend and frontend architecture on a canvas -- drag typed shapes or hand-draw them -- and generate real, runnable code from it via your own coding agent CLI, whichever one you point it at.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "publisher": "ArtemKrasnyi",
   "engines": {
-    "vscode": "^1.93.0"
+    "vscode": "^1.85.0"
   },
   "categories": [
     "Other"
@@ -39,17 +39,6 @@
           "type": "webview"
         }
       ]
-    },
-    "configuration": {
-      "title": "March",
-      "properties": {
-        "march.agentArgs": {
-          "type": "array",
-          "items": { "type": "string" },
-          "default": [],
-          "description": "Flags for Autodiscover's one-shot, non-interactive agent run (it needs a real exit code, unlike Generate's interactive session). Empty by default -- there's no set of flags that works across different agent CLIs (a non-interactive/print flag, a permission mode, an output format are all agent-specific), so this needs to be set for whichever CLI your project's agent binary (set per-project, not here -- see the Agent field in March's nav panel) points at before Autodiscover will run."
-        }
-      }
     }
   },
   "scripts": {
@@ -61,7 +50,7 @@
   "devDependencies": {
     "@march/spec-schema": "*",
     "@types/node": "^20.14.15",
-    "@types/vscode": "^1.93.0",
+    "@types/vscode": "^1.85.0",
     "esbuild": "^0.23.1",
     "typescript": "^5.5.4"
   }

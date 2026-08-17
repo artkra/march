@@ -35,8 +35,7 @@ your actual login, no container to authenticate into.
 
 ## Prerequisites
 
-- VS Code 1.93+ (needed for the Terminal Shell Integration API Autodiscover
-  relies on -- see "How code generation runs" below)
+- VS Code 1.85+
 - Node.js 20+ and npm, to build it
 - A CLI-based coding agent installed and logged in -- whatever CLI command
   starts it should work in your regular terminal. March just shells out to
@@ -98,10 +97,11 @@ or via the UI: Extensions panel -> `...` menu -> "Install from VSIX...".
    root (see below) -- there's no separate login or profile, the workspace
    *is* the project.
 2. The left nav panel is a tree: **Root** at the top is the project's own
-   root canvas, with every module nested under it -- click Root to see every
-   module as a node on one canvas, draw (freely labeled) arrows between them
-   to describe how modules relate, and double-click a module node to open
-   it.
+   root canvas, with every module nested under it in two subgroups --
+   **Backend** and **Frontend** (a group only shows up once it has a module
+   in it) -- click Root to see every module as a node on one canvas, draw
+   (freely labeled) arrows between them to describe how modules relate, and
+   double-click a module node to open it.
 3. **+ New module** picks a **kind** (backend or frontend -- this decides
    both the node vocabulary the canvas offers and the language/framework
    list below), a name, description, and language. There's no per-module
@@ -126,12 +126,13 @@ or via the UI: Extensions panel -> `...` menu -> "Install from VSIX...".
      (`.march/modules/<slug>/module.json`'s `codePath`, a top-level folder
      named after the module by default).
    - **Autodiscover** prompts your agent to explore the whole open workspace,
-     infer its module boundaries and architecture, and write back a full set
-     of March diagrams for it (one canvas per discovered module, wired into
-     the Root canvas via inferred cross-module relationships) -- a fast way
-     to get an existing, undocumented codebase onto a canvas instead of
-     drawing it by hand. Backend-only for now -- see the note in
-     `packages/spec-schema/src/schema.ts` on `ProjectDiscovery`.
+     infer its module boundaries and architecture -- backend and frontend
+     alike -- and write back a full set of March diagrams for it (one
+     canvas per discovered module, wired into the Root canvas via inferred
+     cross-module relationships, including a frontend module's `api_client`
+     calling into a backend module's endpoints) -- a fast way to get an
+     existing, undocumented codebase onto a canvas instead of drawing it by
+     hand.
 
 ### `.march/` -- where your data actually lives
 
@@ -234,43 +235,31 @@ launched from a GUI/dock rather than a terminal, so it doesn't otherwise
 inherit PATH entries added by `.zshrc`/`.bashrc`/nvm/asdf/etc, and a direct
 spawn could report a real, working CLI as "missing".
 
-### Settings
-
-- `march.agentArgs` (default `[]`, a VS Code setting, not per-project) --
-  flags for Autodiscover's one-shot non-interactive run only (see below).
-  Empty by default: there's no set of flags that works across different
-  agent CLIs (a non-interactive/print flag, a permission mode, an output
-  format are all agent-specific), so Autodiscover raises a clear error
-  telling you to set this if it's empty, rather than guessing.
-
 ### How code generation runs
 
-**Generate code** opens a real, visible VS Code terminal per module and runs
-your agent there fully interactively, with no flags that bypass its own
-permission system. Its own permission prompts (if it has them) work
-normally, and you watch/approve/intervene exactly as if you'd typed it
-yourself; the module's spec is written to a prompt file under
+Both **Generate code** and **Autodiscover** open a real, visible VS Code
+terminal and run your agent there fully interactively -- no flags that
+bypass its own permission system, ever. Its own permission prompts (if it
+has them) work normally, and you watch/approve/intervene exactly as if
+you'd typed it yourself; the prompt is written to a file under
 `.march/jobs/` and March just tells the agent (in one line) to go read it,
 rather than trying to paste the whole multi-paragraph prompt into the
-terminal. Because this is an open-ended interactive session, March has no
-way to know when you're "done" with it -- there's no completion status to
-report back, it's purely a hand-off.
+terminal (its embedded newlines would otherwise be read as separate Enter
+keypresses).
 
-**Autodiscover** is different: it's read-only analysis that produces one
-JSON file March needs to parse and act on (creating modules from it), so it
-still needs a deterministic "it's finished, here's the exit code" signal.
-It runs non-interactively (`march.agentArgs`, which you have to set for
-whatever agent you're using -- see Settings above) but inside a *visible*
-terminal rather than a hidden background process, using VS Code's [Terminal
-Shell Integration API](https://code.visualstudio.com/docs/terminal/shell-integration)
-to detect completion -- this needs a POSIX-ish shell (bash/zsh/fish/pwsh);
-it won't activate for cmd.exe, and if it doesn't activate in time March
-tells you rather than silently guessing at success.
+The two differ in how March knows the agent is done, since an interactive
+session has no exit code to track:
+
+- **Generate** doesn't need to know -- it's a pure hand-off. You watch the
+  agent work in its own module's code folder, and that's it.
+- **Autodiscover** does need to know, since it has to parse the one JSON
+  file the agent produces and turn it into modules/diagrams. It gets that
+  by polling for that output file to appear (capped at 30 minutes, just as
+  a safety net against an abandoned session, not a real time expectation)
+  rather than tracking the terminal's process at all.
 
 Same trust model either way as running the agent yourself in a terminal,
-because that's what's actually happening -- neither path disables the
-agent's own permission system, they just differ in how completion gets
-tracked.
+because that's what's actually happening.
 
 ### What Generate's prompt actually asks for
 
@@ -320,7 +309,6 @@ inside a real webview) -- always test via the Extension Development Host.
 - `resolvedBehavior` write-back (round-tripping the agent's implementation
   decisions back into the diagram)
 - Renaming modules from the UI (delete + recreate for now)
-- Frontend-aware Autodiscover (it only infers backend architecture today)
 - Multi-root workspace support (uses the first workspace folder only)
 - Repo round-trip editing (regenerating into a directory that already has
   agent-written code, reconciling diffs)

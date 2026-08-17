@@ -231,17 +231,19 @@ snippet, not a plan).`;
 /**
  * Builds the headless whole-workspace-autodiscovery prompt: explore the
  * entire open folder (not just one directory), identify every distinct
- * backend module/service in it, and emit one spec per module plus the
- * cross-module relationships, all in one JSON document. Modules are
- * referenced by name in "edges" (not id/slug) since none exist yet -- the
- * extension host assigns slugs once each module is actually created on disk.
+ * module/service in it -- backend or frontend -- and emit one spec per
+ * module plus the cross-module relationships, all in one JSON document.
+ * Modules are referenced by name in "edges" (not id/slug) since none exist
+ * yet -- the extension host assigns slugs once each module is actually
+ * created on disk.
  */
 export function buildAutodiscoverProjectPrompt(outputPath: string): string {
   return `You are reverse-engineering a lightweight architecture spec from an
 existing codebase in the current working directory (the root of the whole
-project, which may contain one or several backend modules/services), for
-import into a visual diagram editor called March. Explore the repository
-(read files, do not modify anything) and infer its structure.
+project, which may contain one or several backend and/or frontend
+modules/services), for import into a visual diagram editor called March.
+Explore the repository (read files, do not modify anything) and infer its
+structure.
 
 Produce a JSON document matching this shape and write it to this exact
 absolute path: ${outputPath}
@@ -252,30 +254,43 @@ inside the current working directory.
   "version": "1.0",
   "modules": [
     {
-      "language": "typescript"|"python"|"rust"|"go"|"java"|"csharp"|"ruby"|"php",
+      "kind": "backend"|"frontend",
+      "language": "typescript"|"python"|"rust"|"go"|"java"|"csharp"|"ruby"|"php", // if kind is "backend"
+      // "language": "react"|"vue"|"svelte"|"angular"|"solidjs", // if kind is "frontend" -- pick whichever this field means for the module's kind, never both
       "codePath": string, // path to this module's root dir, relative to the current working directory ("." if the whole repo is one module)
       "spec": {
         "version": "1.0",
         "module": { "name": string, "description": string },
         "nodes": [
           // every node type below shares { "id", "position": {"x":0,"y":0}, "comment": string } plus its own fields
+
+          // backend node types (use these when "kind" is "backend"):
           // type "entity": { "type": "entity", "name", "fields": [{ "name", "fieldType": "string"|"int"|"float"|"bool"|"date"|"uuid"|"relation"|"text", "required": bool, "unique": bool, "relatesTo"?: entityId }] }
           // type "database": { "type": "database", "name", "storageType": "postgres"|"mysql"|"sqlite"|"mongodb"|"redis"|"dynamodb" }
           // type "queue": { "type": "queue", "name", "queueType": "redis"|"rabbitmq"|"kafka" }
           // type "interface": { "type": "interface", "name", "methods": [{ "name", "params": [{"name","paramType"}], "returnType" }] }
           // type "endpoint": { "type": "endpoint", "method": "GET"|"POST"|"PUT"|"PATCH"|"DELETE", "path", "behavior": string, "auth": "none"|"required", "request"?: {"kind":"entity_ref","entityId":string,"excludeFields":string[]} | {"kind":"custom","fields":[...]}, "response"?: same union as request }
           // type "external": { "type": "external", "name", "notes": string }
+
+          // frontend node types (use these when "kind" is "frontend"):
+          // type "component": { "type": "component", "name", "props": [{ "name", "fieldType": "string"|"int"|"float"|"bool"|"date"|"uuid"|"relation"|"text", "required": bool, "unique": bool }] }
+          // type "page": { "type": "page", "name", "path": string }
+          // type "store": { "type": "store", "name", "fields": [{ "name", "fieldType": ..., "required": bool, "unique": bool }] }
+          // type "api_client": { "type": "api_client", "name", "baseUrl": string, "notes": string }
         ],
         "edges": [
-          // { "id", "type": "depends_on"|"implements"|"extends"|"has_one"|"has_many"|"stored_in"|"association", "source": nodeId, "target": nodeId }
-          // or, for a relationship that doesn't fit the above: { "id", "type": "custom", "label": string, "source": nodeId, "target": nodeId }
+          // backend edge types: { "id", "type": "depends_on"|"implements"|"extends"|"has_one"|"has_many"|"stored_in"|"association", "source": nodeId, "target": nodeId }
+          // frontend edge types: { "id", "type": "depends_on"|"association", "source": nodeId, "target": nodeId }
+          // or, for either kind, a relationship that doesn't fit the above: { "id", "type": "custom", "label": string, "source": nodeId, "target": nodeId }
         ]
       }
     }
   ],
   "edges": [
-    // relationships BETWEEN modules (not within one) -- reference modules by
-    // their "spec.module.name" above, since they have no other id yet:
+    // relationships BETWEEN modules (not within one, and not restricted to
+    // same-kind pairs -- a frontend module calling a backend module's API is
+    // exactly the kind of edge this is for) -- reference modules by their
+    // "spec.module.name" above, since they have no other id yet:
     // { "source": moduleName, "target": moduleName, "label": string }
   ]
 }
@@ -283,20 +298,31 @@ inside the current working directory.
 Guidelines:
 - First decide module boundaries: a monorepo with clearly separate
   deployable services/packages (e.g. distinct top-level dirs each with their
-  own manifest/entrypoint) is several modules; a single cohesive backend is
-  one module with "codePath": ".".
-- Within each module, follow the same inference rules as single-module
-  discovery: entities from ORM schema/migrations/models plus a "database"
-  node for their storage system, "queue" nodes from message-broker
-  clients/config, endpoints from route definitions (summarize each handler's
-  actual behavior into "behavior" in your own words), "interface" nodes from
-  abstract base classes/traits/protocols with an "implements" edge from
-  whatever concretely implements them, and "external" nodes from third-party
-  SDK imports/env vars (Stripe, S3, Twilio, etc.).
+  own manifest/entrypoint) is several modules; a single cohesive backend (or
+  frontend) is one module with "codePath": ".". A repo with both an API and
+  a UI is at least two modules -- one "backend", one "frontend" -- don't
+  force them into one.
+- Within each backend module, follow the same inference rules as
+  single-module discovery: entities from ORM schema/migrations/models plus
+  a "database" node for their storage system, "queue" nodes from
+  message-broker clients/config, endpoints from route definitions
+  (summarize each handler's actual behavior into "behavior" in your own
+  words), "interface" nodes from abstract base classes/traits/protocols
+  with an "implements" edge from whatever concretely implements them, and
+  "external" nodes from third-party SDK imports/env vars (Stripe, S3,
+  Twilio, etc.).
+- Within each frontend module: a "component" per reusable UI component
+  (its "props" are its inputs), a "page" per routed view (its "path" is the
+  route), a "store" per client-side state unit (Redux slice, Pinia store,
+  Context, Svelte store, Angular service, etc. -- whatever the framework's
+  own pattern is), and an "api_client" per call boundary out to a backend
+  (name it after what it calls, "baseUrl" if it's evident from config/env
+  vars, "notes" for anything else worth knowing).
 - At the top level, add an "edges" entry for every cross-module relationship
   you can infer (one module calling another's API, sharing a database,
   publishing/consuming from the same queue, importing the other as a
-  library, etc.) with a short freeform "label" describing it.
+  library, a frontend module's api_client hitting a backend module's
+  endpoints, etc.) with a short freeform "label" describing it.
 - Assign every node a unique "id" within its own module (short slug-like
   strings are fine, they only need to be unique inside that module's node
   list) and lay them out on a simple grid via "position" (x/y in increments
